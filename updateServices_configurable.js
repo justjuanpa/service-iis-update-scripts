@@ -44,6 +44,7 @@ async function main() {
     zipPath: "E:\\Services.zip",
     extractPath: "E:\\temp_update",
     targetBase: "E:\\SERVICES\\App_Data\\jobs\\continuous",
+    backupBase: "E:\\backups",
   };
 
   // Load config if it exists
@@ -55,6 +56,7 @@ async function main() {
   console.log("ZIP Path:       " + config.zipPath);
   console.log("Extract Path:   " + config.extractPath);
   console.log("Target Folder:  " + config.targetBase);
+  console.log("Backup Path:    " + config.backupBase);
 
   let answer = (
     await askQuestion("\nWould you like to use these paths? (yes/no): ")
@@ -65,10 +67,13 @@ async function main() {
     await confirmAndUpdate("path to ZIP file", "zipPath", config);
     await confirmAndUpdate("extract path", "extractPath", config);
     await confirmAndUpdate("target service folder", "targetBase", config);
+    await confirmAndUpdate("path for backups", "backupBase", config);
 
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
     console.log("✅ Updated config saved.\n");
   }
+
+  rl.close();
 
   if (!fs.existsSync(config.zipPath)) {
     console.error(`❌ ZIP file not found at: ${config.zipPath}`);
@@ -88,7 +93,13 @@ async function main() {
     process.exit(1);
   }
 
-  rl.close();
+  const backupParent = path.dirname(config.backupBase);
+  if (!fs.existsSync(backupParent)) {
+    console.error(
+      `❌ Parent folder of backup path does not exist: ${backupParent}`
+    );
+    process.exit(1);
+  }
 
   try {
     console.log("Cleaning up any old temp folder...");
@@ -110,6 +121,10 @@ async function main() {
       "continuous"
     );
 
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const backupRoot = path.join(config.backupBase, `backup-${dateStr}`);
+    await fs.ensureDir(backupRoot);
+
     for (const { serviceName, folderName } of services) {
       try {
         console.log(`\nStopping service: "${serviceName}"...`);
@@ -117,6 +132,11 @@ async function main() {
 
         const src = path.join(sourceBase, folderName);
         const dest = path.join(config.targetBase, folderName);
+
+        const backupDest = path.join(backupRoot, folderName);
+        console.log(`Backing up ${folderName} to: ${backupDest}`);
+        await fs.copy(dest, backupDest);
+
         console.log(`Updating folder: ${folderName}`);
         await fs.copy(src, dest, { overwrite: true });
 
