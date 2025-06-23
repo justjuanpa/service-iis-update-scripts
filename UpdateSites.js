@@ -37,6 +37,7 @@ async function main() {
     zipPath: "E:\\drop.zip",
     extractPath: "E:\\temp_iis_update",
     targetBase: "E:\\pub\\beta-ci",
+    backupBase: "E:\\backups",
   };
 
   if (fs.existsSync(configPath)) {
@@ -47,6 +48,7 @@ async function main() {
   console.log("ZIP Path:       " + config.zipPath);
   console.log("Extract Path:   " + config.extractPath);
   console.log("Target Folder:  " + config.targetBase);
+  console.log("Backup Path:    " + config.backupBase);
 
   const answer = (
     await askQuestion("\nWould you like to use these paths? (yes/no): ")
@@ -58,6 +60,7 @@ async function main() {
     await confirmAndUpdate("path to ZIP file", "zipPath", config);
     await confirmAndUpdate("extract path", "extractPath", config);
     await confirmAndUpdate("target web root folder", "targetBase", config);
+    await confirmAndUpdate("path for backups", "backupBase", config);
 
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
     console.log("✅ Updated config saved.\n");
@@ -84,6 +87,11 @@ async function main() {
 
     const sourceBase = path.join(config.extractPath, "drop");
 
+    // Create a backup folder inside targetBase/backups with today's date
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const backupRoot = path.join(config.backupBase, `backup-${dateStr}`);
+    await fs.ensureDir(backupRoot);
+
     for (const { pool, folder } of apps) {
       try {
         const appcmd = "C:\\Windows\\System32\\inetsrv\\appcmd.exe";
@@ -94,6 +102,13 @@ async function main() {
 
         const src = path.join(sourceBase, folder);
         const dest = path.join(config.targetBase, folder);
+
+        // Backup current folder
+        const backupDest = path.join(backupRoot, folder);
+        console.log(`Backing up ${folder} to: ${backupDest}`);
+        await fs.copy(dest, backupDest);
+
+        // Replace with new version
         console.log(`Updating folder: ${folder}`);
         await fs.copy(src, dest, { overwrite: true });
 
